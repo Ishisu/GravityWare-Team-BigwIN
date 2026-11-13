@@ -1,0 +1,8 @@
+Date,Heart Rate,Systolic BP,Diastolic BP,SpO2,Temperature,Sleep Hours,Stress,Fatigue,Exercise Minutes,Mood,Gravity Phase,Gravity Symptoms
+2026-11-07T14:34:27,72,118,78,98,36.7,7.5,3,2,45,Good,Earth (1g),None
+2026-11-08T14:34:27,75,120,80,98,36.8,7.0,4,3,40,Good,Earth (1g),None
+2026-11-09T14:34:27,78,121,81,97,36.8,6.5,5,4,35,Okay,Microgravity (Orbit),Nausea
+2026-11-10T14:34:27,80,124,82,97,36.9,6.0,5,5,35,Okay,Microgravity (Orbit),Dizziness
+2026-11-11T14:34:27,82,126,84,96,37.0,5.5,6,6,30,Okay,Microgravity (Orbit),"Dizziness, Fatigue"
+2026-11-12T14:34:27,79,122,81,97,36.8,7.0,4,3,40,Good,Microgravity (Orbit),None
+2026-11-13T14:34:27,76,120,80,98,36.7,7.5,3,2,45,Good,Microgravity (Orbit),None
