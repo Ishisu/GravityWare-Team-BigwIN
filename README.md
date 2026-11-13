@@ -1,80 +1,56 @@
-# GravityWare v1.2 — Team BigwIN
+# GravityWare v1.3 — Team BigwIN
 
-**GravityWare** is an educational astronaut health and gravity-adaptation monitoring prototype.
+**Understanding Health Beyond Earth**
 
-## Features
-- Dark Streamlit dashboard
-- Simulated astronaut health history
-- Manual health readings
-- Explainable rule-based health alerts
-- Gravity Adaptation Monitor (GAM)
-- Selectable comparison baseline
-- Earth, orbital microgravity, Moon and Mars gravity profiles
-- Gravity-related symptom tracking
-- Body-system information explorer
-- CSV health history and TXT mission report downloads
+GravityWare v1.3 is a Streamlit educational prototype for astronaut daily health logging, personal trend review and gravity-adaptation comparisons.
 
-## Requirements
-- Windows, macOS or Linux
-- Python 3.10 or newer (Python 3.12/3.13 recommended)
+## What's new in v1.3
+- Individual email/password account registration and sign-in using Supabase Auth
+- Permanent PostgreSQL health records in Supabase
+- Row Level Security (RLS): each signed-in user can only read/write their own records
+- One daily record per astronaut ID per date
+- Daily entry, health history, dashboard charts and baseline comparison
+- Date-range PDF and CSV report downloads
 
-## Run on Windows
+## Project structure
+```
+GravityWare_v1.3/
+├── app.py
+├── assets/
+│   └── gravityware_logo.png
+├── requirements.txt
+├── README.md
+├── SETUP_GUIDE.md
+├── .gitignore
+├── .streamlit/
+│   └── secrets.toml.example
+├── database/
+│   └── setup.sql
+└── data/
+    └── sample_astronaut_data.csv
+```
 
-1. Extract the ZIP.
-2. Open the `GravityWare` folder in VS Code.
-3. Open Terminal → New Terminal.
-4. Create a virtual environment:
-
-   ```powershell
+## Quick start
+1. Create a Supabase project.
+2. Run `database/setup.sql` in Supabase SQL Editor.
+3. Copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml`.
+4. Put your Supabase Project URL and **publishable/anon key** in the secrets file.
+5. In the project terminal run:
+   ```
    python -m venv .venv
-   ```
-
-5. Activate it:
-
-   ```powershell
-   .venv\Scripts\Activate.ps1
-   ```
-
-   If PowerShell blocks activation, use the environment's Python directly:
-
-   ```powershell
    .venv\Scripts\python.exe -m pip install -r requirements.txt
    .venv\Scripts\python.exe -m streamlit run app.py
    ```
+6. Create an astronaut account in the app and sign in.
 
-6. Install packages:
+See `SETUP_GUIDE.md` for full local and Streamlit Community Cloud deployment instructions.
 
-   ```powershell
-   python -m pip install -r requirements.txt
-   ```
+## Security notes
+- Do not commit `.streamlit/secrets.toml`.
+- Use the Supabase publishable/anon key with RLS policies enabled. Never use the Supabase `service_role` or secret key in this Streamlit app.
+- Do not collect real astronaut medical data. This competition prototype is not designed or certified for protected health information.
+- Email confirmation may be enabled by default in Supabase Auth. If enabled, users must confirm their email before signing in.
+- Use a strong, unique password. For a real production service, add stronger account lifecycle, audit, operational and security controls.
 
-7. Start the application:
-
-   ```powershell
-   python -m streamlit run app.py
-   ```
-
-8. Open the local address shown in the terminal, usually http://localhost:8501.
-
-## Project files
-- `app.py` — complete Streamlit application
-- `requirements.txt` — Python dependencies
-- `data/sample_astronaut_data.csv` — example simulated dataset
-- `.gitignore` — excludes local environment and cache files
-
-## Demo walkthrough
-1. Open Mission Dashboard.
-2. View the simulated health summary and GAM indicators.
-3. Open Gravity Adaptation and compare the baseline with the latest reading.
-4. Select Health Monitoring and add a new reading with symptoms such as dizziness.
-5. Open Mission Report and download the CSV/TXT reports.
-
-## Important limitations
-- All included sample records are simulated.
-- New records are held in Streamlit session state; they are not a permanent database and may be lost when the session restarts.
-- Health alerts use simple demonstration rules, not a trained or clinically validated AI model.
-- GAM counts selected changes in entered data. It is not a validated medical score and cannot establish that gravity caused a change.
-- This software is an educational competition prototype, not a medical device, diagnosis or treatment recommendation. Real emergencies must be handled using qualified medical and mission protocols.
-
-## Research direction
-The project is motivated by human spaceflight research topics such as altered gravity, fluid shifts, cardiovascular adaptation, sensorimotor changes, muscle and bone deconditioning, sleep and behavioral health. Cite and verify NASA research sources in the competition submission.
+## Scientific limitations
+Gravity Adaptation comparisons are descriptive and experimental, not a validated clinical score. They cannot prove gravity caused an observed change. Sample records are simulated. This app is not a medical device, diagnostic system or substitute for qualified medical/mission protocols.

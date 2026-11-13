@@ -1,0 +1,4 @@
+record_date,mission_day,gravity_environment,heart_rate,spo2,sleep_hours,stress_level,fatigue_level
+2026-10-01,1,Earth (1g),72,98,7.5,2,2
+2026-10-02,2,Orbital microgravity,78,97,6.5,3,3
+2026-10-03,3,Orbital microgravity,76,98,7.0,3,2

@@ -1,437 +1,406 @@
-import streamlit as st
+import io
+import os
+import csv
+from datetime import date, datetime, timedelta
+from typing import Optional
+
 import pandas as pd
 import plotly.express as px
-from datetime import datetime, timedelta
+import streamlit as st
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
-# ============================================================
-# GRAVITYWARE v1.2 | Team BigwIN
-# Educational astronaut health + gravity adaptation prototype
-# ============================================================
+from supabase import create_client
 
-st.set_page_config(
-    page_title="GravityWare | Astronaut Health & Adaptation",
-    page_icon="🚀",
-    layout="wide"
-)
+st.set_page_config(page_title="GravityWare | Astronaut Health Monitor", page_icon=None, layout="wide", initial_sidebar_state="expanded")
 
+# ---------- GravityWare visual system ----------
 st.markdown("""
 <style>
-.stApp {
-    background: linear-gradient(135deg, #07111f 0%, #101b32 55%, #10152a 100%);
-    color: #e8f1ff;
-}
-section[data-testid="stSidebar"] { background: #0b1425; }
-h1, h2, h3 { color: #73d5ff !important; }
-div[data-testid="stMetric"] {
-    background: #14243b; border: 1px solid #294461;
-    padding: 14px; border-radius: 12px;
-}
-.stButton button, .stDownloadButton button {
-    background: #087eaa; color: white; border-radius: 8px;
-}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+:root { color-scheme: dark; }
+.stApp { background: radial-gradient(ellipse at 78% 4%, rgba(22,105,178,.22), transparent 36%), radial-gradient(ellipse at 8% 95%, rgba(42,78,168,.18), transparent 32%), #050b18; color:#eaf3ff; font-family:Inter, sans-serif; }
+[data-testid="stHeader"] { background:rgba(4,10,22,.72); }
+[data-testid="stToolbar"] { right:1rem; }
+section[data-testid="stSidebar"] { background:linear-gradient(180deg,#071329 0%,#091a34 72%,#061022 100%); border-right:1px solid #1a3556; }
+section[data-testid="stSidebar"] > div { padding-top:1rem; }
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p { color:#c4d7ef; }
+section[data-testid="stSidebar"] [data-testid="stRadio"] label { background:transparent; border-radius:12px; padding:8px 10px; margin:2px 0; }
+section[data-testid="stSidebar"] [data-testid="stRadio"] label:hover { background:#102b50; }
+h1,h2,h3 { color:#f0f6ff !important; letter-spacing:-.025em; }
+h1 { font-weight:800 !important; }
+p, label, .stMarkdown { color:#d4e3f5; }
+.small-muted { color:#91aaca; font-size:.9rem; }
+.gw-eyebrow { color:#43c4ff; letter-spacing:.18em; text-transform:uppercase; font-size:.76rem; font-weight:700; }
+.gw-hero { padding:22px 26px 20px; border:1px solid rgba(67,153,226,.25); border-radius:22px; background:linear-gradient(110deg,rgba(12,31,61,.96),rgba(9,22,45,.84) 56%,rgba(20,65,112,.48)); box-shadow:0 16px 44px rgba(0,0,0,.22); margin-bottom:20px; }
+.gw-hero-title { font-size:clamp(1.8rem,4vw,2.65rem); font-weight:800; color:#f4f8ff; line-height:1.12; }
+.gw-hero-title span { background:linear-gradient(90deg,#25c4ff,#8272ff); -webkit-background-clip:text; background-clip:text; color:transparent; }
+.gw-hero-sub { color:#9db7d8; font-size:1rem; margin-top:7px; }
+div[data-testid="stMetric"] { background:linear-gradient(145deg,rgba(18,43,77,.95),rgba(10,24,47,.96)); border:1px solid #24476e; padding:16px 17px; border-radius:17px; box-shadow:0 8px 24px rgba(0,0,0,.16); }
+div[data-testid="stMetricLabel"] { color:#9eb9dc !important; }
+div[data-testid="stMetricValue"] { color:#f2f7ff !important; }
+div[data-testid="stForm"] { background:linear-gradient(145deg,#0b1b32,#0a172a); border:1px solid #234365; padding:20px; border-radius:18px; }
+.stTextInput input,.stNumberInput input,.stDateInput input,.stTextArea textarea { background:#0b1b31 !important; color:#eff7ff !important; border:1px solid #294968 !important; border-radius:10px !important; }
+.stSelectbox div[data-baseweb="select"] > div,.stMultiSelect div[data-baseweb="select"] > div { background:#0b1b31; border-color:#294968; border-radius:10px; }
+.stSlider [data-baseweb="slider"] { color:#24b9ff; }
+div.stButton > button, div.stDownloadButton > button, button[kind="primary"] { border-radius:11px; border:1px solid #267cc2; background:linear-gradient(100deg,#087ed5,#2859c8); color:white; font-weight:650; min-height:2.7rem; }
+div.stButton > button:hover, div.stDownloadButton > button:hover { border-color:#61d4ff; color:white; box-shadow:0 0 18px rgba(35,166,255,.25); }
+[data-testid="stPlotlyChart"] { background:linear-gradient(145deg,rgba(12,29,54,.9),rgba(8,19,37,.95)); border:1px solid #203e60; border-radius:17px; padding:8px; }
+[data-testid="stDataFrame"] { border:1px solid #244365; border-radius:14px; overflow:hidden; }
+[data-testid="stAlert"] { border-radius:13px; }
+hr { border-color:#1c3859; }
+footer { visibility:hidden; }
 </style>
 """, unsafe_allow_html=True)
 
-APP_NAME = "GravityWare"
-VERSION = "1.2"
-GRAVITY_LEVELS = {
-    "Earth (1g)": 1.0,
-    "Microgravity (Orbit)": 0.0,
-    "Moon (0.16g)": 0.16,
-    "Mars (0.38g)": 0.38,
-    "Return to Earth (1g)": 1.0,
-}
+# Main brand header — custom logo replaces generic rocket/space icon.
+logo_path = "assets/gravityware_logo.png"
+if os.path.exists(logo_path):
+    st.image(logo_path, width=440)
+st.markdown("<div class='gw-eyebrow'>TEAM BIGWIN · NASA SPACE APPS 2026</div>", unsafe_allow_html=True)
+st.markdown("<div class='small-muted'>Healthy Astronauts. Successful Missions. &nbsp; · &nbsp; Monitor · Adapt · Thrive</div>", unsafe_allow_html=True)
 
-COLUMNS = [
-    "Date", "Heart Rate", "Systolic BP", "Diastolic BP", "SpO2",
-    "Temperature", "Sleep Hours", "Stress", "Fatigue",
-    "Exercise Minutes", "Mood", "Gravity Phase", "Gravity Symptoms"
-]
+# ---------- Supabase setup ----------
+def get_secret(name: str) -> Optional[str]:
+    try:
+        value = st.secrets.get(name)
+        if value:
+            return str(value).strip()
+    except Exception:
+        pass
+    return None
 
-def create_sample_data():
-    now = datetime.now()
-    samples = [
-        [6, 72, 118, 78, 98, 36.7, 7.5, 3, 2, 45, "Good", "Earth (1g)", "None"],
-        [5, 75, 120, 80, 98, 36.8, 7.0, 4, 3, 40, "Good", "Earth (1g)", "None"],
-        [4, 78, 121, 81, 97, 36.8, 6.5, 5, 4, 35, "Okay", "Microgravity (Orbit)", "Nausea"],
-        [3, 80, 124, 82, 97, 36.9, 6.0, 5, 5, 35, "Okay", "Microgravity (Orbit)", "Dizziness"],
-        [2, 82, 126, 84, 96, 37.0, 5.5, 6, 6, 30, "Okay", "Microgravity (Orbit)", "Dizziness, Fatigue"],
-        [1, 79, 122, 81, 97, 36.8, 7.0, 4, 3, 40, "Good", "Microgravity (Orbit)", "None"],
-        [0, 76, 120, 80, 98, 36.7, 7.5, 3, 2, 45, "Good", "Microgravity (Orbit)", "None"],
+SUPABASE_URL = get_secret("SUPABASE_URL")
+SUPABASE_KEY = get_secret("SUPABASE_KEY")
+
+def supabase_client():
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return None
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+def set_auth_session(client, access_token, refresh_token):
+    # A fresh client is created for this Streamlit session; tokens are stored per browser session.
+    client.auth.set_session(access_token, refresh_token)
+    return client
+
+def get_user_id(user):
+    return getattr(user, "id", None) or (user.get("id") if isinstance(user, dict) else None)
+
+def get_user_email(user):
+    return getattr(user, "email", None) or (user.get("email") if isinstance(user, dict) else None)
+
+def auth_screen():
+    st.subheader("Astronaut account access")
+    st.info("Create an individual account or sign in. Each account can view and manage only its own records.")
+    tab_login, tab_signup = st.tabs(["Sign in", "Create account"])
+    client = supabase_client()
+    if client is None:
+        st.error("Supabase is not configured yet. Follow SETUP_GUIDE.md to create a Supabase project and add SUPABASE_URL and SUPABASE_KEY to Streamlit secrets.")
+        st.stop()
+
+    with tab_login:
+        with st.form("login_form"):
+            email = st.text_input("Email address", key="login_email")
+            password = st.text_input("Password", type="password", key="login_password")
+            submitted = st.form_submit_button("Sign in", use_container_width=True)
+        if submitted:
+            try:
+                result = client.auth.sign_in_with_password({"email": email.strip(), "password": password})
+                if result.session and result.user:
+                    st.session_state["access_token"] = result.session.access_token
+                    st.session_state["refresh_token"] = result.session.refresh_token
+                    st.session_state["user_id"] = get_user_id(result.user)
+                    st.session_state["user_email"] = get_user_email(result.user)
+                    st.rerun()
+                st.error("Sign-in did not return an active session. Check your email and password.")
+            except Exception as exc:
+                st.error(f"Sign-in failed: {exc}")
+
+    with tab_signup:
+        with st.form("signup_form"):
+            astronaut_name = st.text_input("Astronaut display name")
+            astronaut_code = st.text_input("Astronaut ID / callsign", placeholder="e.g. BW-001")
+            email = st.text_input("Email address", key="signup_email")
+            password = st.text_input("Create password", type="password", key="signup_password")
+            confirm = st.text_input("Confirm password", type="password")
+            submitted = st.form_submit_button("Create account", use_container_width=True)
+        if submitted:
+            if not astronaut_name.strip() or not astronaut_code.strip() or not email.strip():
+                st.warning("Please complete the name, astronaut ID and email fields.")
+            elif len(password) < 8:
+                st.warning("Use a password with at least 8 characters.")
+            elif password != confirm:
+                st.warning("The passwords do not match.")
+            else:
+                try:
+                    result = client.auth.sign_up({
+                        "email": email.strip(),
+                        "password": password,
+                        "options": {"data": {"astronaut_name": astronaut_name.strip(), "astronaut_code": astronaut_code.strip()}}
+                    })
+                    if result.session and result.user:
+                        st.session_state["access_token"] = result.session.access_token
+                        st.session_state["refresh_token"] = result.session.refresh_token
+                        st.session_state["user_id"] = get_user_id(result.user)
+                        st.session_state["user_email"] = get_user_email(result.user)
+                        st.success("Account created.")
+                        st.rerun()
+                    else:
+                        st.success("Account created. Check your email for the confirmation link, then return here and sign in.")
+                except Exception as exc:
+                    st.error(f"Account creation failed: {exc}")
+
+if "access_token" not in st.session_state or "refresh_token" not in st.session_state:
+    auth_screen()
+    st.stop()
+
+client = supabase_client()
+if client is None:
+    st.error("Supabase configuration is missing.")
+    st.stop()
+
+try:
+    client = set_auth_session(client, st.session_state["access_token"], st.session_state["refresh_token"])
+    current_user = client.auth.get_user()
+    user = current_user.user
+    user_id = get_user_id(user)
+    if not user_id:
+        raise RuntimeError("Could not identify the signed-in user.")
+    st.session_state["user_id"] = user_id
+except Exception:
+    for key in ["access_token", "refresh_token", "user_id", "user_email"]:
+        st.session_state.pop(key, None)
+    st.warning("Your login session expired. Please sign in again.")
+    st.rerun()
+
+# ---------- Helpers ----------
+def safe_execute(query):
+    try:
+        return query.execute().data
+    except Exception as exc:
+        st.error(f"Database operation failed: {exc}")
+        return None
+
+def load_records(start=None, end=None):
+    query = client.table("health_records").select("*").order("record_date", desc=True)
+    if start:
+        query = query.gte("record_date", start.isoformat())
+    if end:
+        query = query.lte("record_date", end.isoformat())
+    return safe_execute(query)
+
+def make_pdf(df: pd.DataFrame, report_title: str, astronaut_label: str) -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=12*mm, leftMargin=12*mm, topMargin=12*mm, bottomMargin=12*mm)
+    styles = getSampleStyleSheet()
+    story = [
+        Paragraph("GravityWare — Astronaut Health Report", styles["Title"]),
+        Paragraph(report_title, styles["Heading2"]),
+        Paragraph(f"Astronaut: {astronaut_label} | Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles["Normal"]),
+        Spacer(1, 8*mm),
     ]
-    records = []
-    for r in samples:
-        records.append({
-            "Date": now - timedelta(days=r[0]),
-            "Heart Rate": r[1], "Systolic BP": r[2], "Diastolic BP": r[3],
-            "SpO2": r[4], "Temperature": r[5], "Sleep Hours": r[6],
-            "Stress": r[7], "Fatigue": r[8], "Exercise Minutes": r[9],
-            "Mood": r[10], "Gravity Phase": r[11], "Gravity Symptoms": r[12],
-        })
-    return pd.DataFrame(records, columns=COLUMNS)
-
-if "health_data" not in st.session_state:
-    st.session_state.health_data = create_sample_data()
-
-if "baseline_index" not in st.session_state:
-    st.session_state.baseline_index = 0
-
-def assess_health(reading):
-    urgent, warnings = [], []
-    symptoms = str(reading.get("Gravity Symptoms", "None"))
-    emergency_symptoms = [
-        "Chest pain", "Severe breathing difficulty", "Fainting",
-        "New confusion or weakness"
-    ]
-    if symptoms != "None":
-        for symptom in symptoms.split(", "):
-            if symptom in emergency_symptoms:
-                urgent.append(f"Reported emergency symptom: {symptom}")
-    if reading["SpO2"] < 90:
-        urgent.append("Very low oxygen saturation reading")
-    if reading["Systolic BP"] >= 180 or reading["Diastolic BP"] >= 120:
-        urgent.append("Very high blood pressure reading")
-    if reading["Heart Rate"] < 40 or reading["Heart Rate"] > 130:
-        urgent.append("Heart rate outside this prototype's urgent-review limits")
-    if reading["Temperature"] >= 39.5:
-        urgent.append("High temperature reading")
-    if reading["SpO2"] < 95:
-        warnings.append("Oxygen saturation below the prototype reference threshold")
-    if reading["Systolic BP"] >= 140 or reading["Diastolic BP"] >= 90:
-        warnings.append("Elevated blood pressure reading")
-    if reading["Heart Rate"] < 50 or reading["Heart Rate"] > 100:
-        warnings.append("Heart rate outside a general reference range")
-    if reading["Temperature"] >= 38:
-        warnings.append("Elevated temperature")
-    if reading["Sleep Hours"] < 5:
-        warnings.append("Low sleep duration")
-    if reading["Stress"] >= 8:
-        warnings.append("High reported stress")
-    if reading["Fatigue"] >= 8:
-        warnings.append("High reported fatigue")
-    if urgent:
-        return "RED", urgent + warnings
-    if warnings:
-        return "YELLOW", warnings
-    return "GREEN", ["No rule-based warning detected in entered readings"]
-
-def gravity_assessment(baseline, current):
-    indicators, details = [], []
-    checks = [
-        ("Heart rate change", abs(current["Heart Rate"] - baseline["Heart Rate"]) >= 15,
-         f"Heart rate changed by {current['Heart Rate'] - baseline['Heart Rate']:+.0f} bpm from baseline."),
-        ("Reduced sleep", baseline["Sleep Hours"] - current["Sleep Hours"] >= 2,
-         f"Sleep changed by {current['Sleep Hours'] - baseline['Sleep Hours']:+.1f} hours from baseline."),
-        ("Increased fatigue", current["Fatigue"] - baseline["Fatigue"] >= 3,
-         f"Fatigue changed by {current['Fatigue'] - baseline['Fatigue']:+.0f} points."),
-        ("Increased stress", current["Stress"] - baseline["Stress"] >= 3,
-         f"Stress changed by {current['Stress'] - baseline['Stress']:+.0f} points."),
-        ("Low recorded exercise", current["Exercise Minutes"] < 30,
-         "Recorded exercise is below this prototype's 30-minute monitoring prompt."),
-    ]
-    for name, triggered, detail in checks:
-        if triggered:
-            indicators.append(name)
-            details.append(detail)
-    symptom_text = str(current.get("Gravity Symptoms", "None"))
-    monitored = ["Dizziness", "Nausea", "Vision changes", "Facial fullness", "Muscle discomfort"]
-    if symptom_text != "None":
-        for symptom in monitored:
-            if symptom in symptom_text:
-                indicators.append(symptom)
-                details.append(f"Reported symptom: {symptom}.")
-    count = len(indicators)
-    status = "NO FLAGGED CHANGE" if count == 0 else ("SOME CHANGES TO REVIEW" if count <= 2 else "MULTIPLE CHANGES TO REVIEW")
-    if not details:
-        details.append("No monitored changes were flagged against the selected baseline.")
-    return count, status, indicators, details
-
-def recommendations(level):
-    if level == "RED":
-        return [
-            "Follow the mission emergency medical protocol immediately.",
-            "Notify the designated medical officer or flight surgeon.",
-            "Do not delay emergency care to repeat measurements."
-        ]
-    if level == "YELLOW":
-        return [
-            "Repeat the measurement and verify sensor quality where appropriate.",
-            "Compare the reading with the astronaut's personal baseline.",
-            "Inform the mission medical officer according to mission protocol."
-        ]
-    return [
-        "Continue routine health monitoring.",
-        "Maintain mission-approved sleep, hydration and exercise routines.",
-        "Report new or worsening symptoms to the medical team."
-    ]
-
-# Sidebar and navigation
-with st.sidebar:
-    st.title("🚀 GravityWare")
-    st.caption("ASTRONAUT HEALTH + GRAVITY ADAPTATION")
-    st.divider()
-    astronaut_id = st.text_input("Astronaut ID", "ASTRA-001")
-    mission = st.selectbox("Mission", ["Earth Orbit", "Lunar Mission", "Mars Mission"])
-    gravity_phase = st.selectbox("Current Gravity Environment", list(GRAVITY_LEVELS), index=1)
-    mission_day = st.number_input("Mission Day", min_value=0, max_value=2000, value=12)
-    page = st.radio("Navigation", [
-        "Mission Dashboard", "Health Monitoring", "Gravity Adaptation",
-        "Body Systems", "Mission Report", "About"
-    ])
-    st.divider()
-    st.caption(f"Team BigwIN | {APP_NAME} v{VERSION}")
-
-data = st.session_state.health_data
-baseline_index = min(st.session_state.baseline_index, len(data) - 1)
-baseline = data.iloc[baseline_index].to_dict()
-latest = data.iloc[-1].to_dict()
-health_level, health_reasons = assess_health(latest)
-gam_count, gam_status, gam_indicators, gam_details = gravity_assessment(baseline, latest)
-
-st.title("🛰️ GravityWare")
-st.markdown("### Understanding Health Beyond Earth")
-st.caption("Your Health. Your Mission. Your Safety. | Team BigwIN | Prototype v1.2")
-st.info(
-    f"Astronaut: {astronaut_id}  |  Mission: {mission}  |  "
-    f"Selected environment: {gravity_phase}  |  Mission day: {mission_day}"
-)
-
-if page == "Mission Dashboard":
-    st.subheader("Mission Health Overview")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Heart Rate", f"{latest['Heart Rate']} bpm")
-    c2.metric("Blood Pressure", f"{latest['Systolic BP']}/{latest['Diastolic BP']}")
-    c3.metric("Oxygen Saturation", f"{latest['SpO2']}%")
-    c4.metric("Sleep", f"{latest['Sleep Hours']} hrs")
-    st.divider()
-    st.subheader("Rule-based Health Assessment")
-    if health_level == "RED":
-        st.error("🔴 RED — Urgent medical review required")
-    elif health_level == "YELLOW":
-        st.warning("🟡 YELLOW — Attention recommended")
+    if df.empty:
+        story.append(Paragraph("No health records were found for this date range.", styles["Normal"]))
     else:
-        st.success("🟢 GREEN — No rule-based warning detected")
-    for reason in health_reasons:
-        st.write("•", reason)
-    st.divider()
-    st.subheader("Gravity Adaptation Monitor (GAM)")
-    a, b, c = st.columns(3)
-    a.metric("Change indicators", gam_count)
-    b.metric("Monitoring summary", gam_status)
-    c.metric("Gravity level", f"{GRAVITY_LEVELS[gravity_phase]:.2f} g")
-    st.caption("GAM counts selected changes from a comparison baseline. It is experimental, not a validated medical score.")
-    for detail in gam_details:
-        st.write("•", detail)
-    st.divider()
-    st.subheader("Health Trends")
-    chart1, chart2 = st.columns(2)
-    with chart1:
-        fig = px.line(data, x="Date", y="Heart Rate", markers=True,
-                      title="Heart Rate Trend", template="plotly_dark")
-        st.plotly_chart(fig, use_container_width=True)
-    with chart2:
-        fig = px.line(data, x="Date", y="Sleep Hours", markers=True,
-                      title="Sleep Trend", template="plotly_dark")
-        st.plotly_chart(fig, use_container_width=True)
-    fig = px.line(data, x="Date", y="Fatigue", markers=True,
-                  title="Fatigue Trend", template="plotly_dark")
-    st.plotly_chart(fig, use_container_width=True)
-    st.subheader("Recent Health Records")
-    st.dataframe(data.sort_values("Date", ascending=False), use_container_width=True)
+        cols = ["record_date", "mission_day", "gravity_environment", "heart_rate", "systolic_bp", "diastolic_bp", "spo2", "temperature_c", "sleep_hours", "stress_level", "fatigue_level", "exercise_minutes", "symptoms"]
+        view = df[[c for c in cols if c in df.columns]].copy()
+        data = [list(view.columns)] + view.fillna("").astype(str).values.tolist()
+        table = Table(data, repeatRows=1)
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#17324f")),
+            ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+            ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#aab8c7")),
+            ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTSIZE", (0,0), (-1,-1), 7),
+            ("VALIGN", (0,0), (-1,-1), "TOP"),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#edf3f8")]),
+        ]))
+        story.append(table)
+    story.append(Spacer(1, 5*mm))
+    story.append(Paragraph("Educational prototype only. Not a diagnosis, treatment recommendation, or clinically validated medical score. Follow qualified medical and mission protocols for health concerns.", styles["Italic"]))
+    doc.build(story)
+    return buffer.getvalue()
 
-elif page == "Health Monitoring":
-    st.subheader("Enter Astronaut Health Readings")
-    with st.form("health_form"):
-        left, right = st.columns(2)
-        with left:
-            heart_rate = st.number_input("Heart Rate (bpm)", 20, 220, 75)
-            systolic = st.number_input("Systolic BP", 50, 250, 120)
-            diastolic = st.number_input("Diastolic BP", 30, 150, 80)
-            spo2 = st.number_input("Oxygen Saturation (%)", 50, 100, 98)
-            temperature = st.number_input("Temperature (°C)", 30.0, 43.0, 36.8, step=0.1)
-        with right:
-            sleep = st.number_input("Sleep Hours", 0.0, 24.0, 7.0, step=0.5)
-            stress = st.slider("Stress Level", 1, 10, 3)
-            fatigue = st.slider("Fatigue Level", 1, 10, 3)
-            exercise = st.number_input("Exercise Minutes", 0, 300, 45)
-            mood = st.selectbox("Mood", ["Good", "Okay", "Low", "Very Low"])
-        phase = st.selectbox("Gravity Environment for this reading", list(GRAVITY_LEVELS), index=list(GRAVITY_LEVELS).index(gravity_phase))
-        symptoms = st.multiselect("Reported Symptoms", [
-            "Dizziness", "Nausea", "Vision changes", "Facial fullness",
-            "Muscle discomfort", "Headache", "Chest pain",
-            "Severe breathing difficulty", "Fainting", "New confusion or weakness"
-        ])
-        submitted = st.form_submit_button("Save Readings and Assess Health", use_container_width=True)
+# ---------- Sidebar ----------
+with st.sidebar:
+    if os.path.exists("assets/gravityware_logo.png"):
+        st.image("assets/gravityware_logo.png", use_container_width=True)
+    st.markdown("<div class='gw-eyebrow'>MISSION CONTROL</div>", unsafe_allow_html=True)
+    st.write(f"Signed in: **{st.session_state.get('user_email', get_user_email(user) or 'Astronaut')}**")
+    page = st.radio("Navigation", ["Dashboard", "Daily Health Log", "Health History", "Reports", "Gravity Adaptation", "About"])
+    if st.button("Sign out", use_container_width=True):
+        try:
+            client.auth.sign_out()
+        except Exception:
+            pass
+        for key in ["access_token", "refresh_token", "user_id", "user_email"]:
+            st.session_state.pop(key, None)
+        st.rerun()
+
+# ---------- Dashboard ----------
+if page == "Dashboard":
+    st.markdown("<div class='gw-hero'><div class='gw-eyebrow'>MISSION CONTROL</div><div class='gw-hero-title'>Welcome back, <span>Astronaut!</span></div><div class='gw-hero-sub'>Your Health. Our Mission. &nbsp; · &nbsp; Personal health overview and gravity adaptation tracking.</div></div>", unsafe_allow_html=True)
+    rows = load_records()
+    records = rows or []
+    df = pd.DataFrame(records)
+    if not df.empty:
+        latest = df.iloc[0]
+        c1,c2,c3,c4 = st.columns(4)
+        c1.metric("Latest heart rate", f"{latest.get('heart_rate','—')} bpm")
+        c2.metric("Latest SpO₂", f"{latest.get('spo2','—')}%")
+        c3.metric("Sleep", f"{latest.get('sleep_hours','—')} h")
+        c4.metric("Records logged", len(df))
+        st.subheader("Recent health indicators")
+        chart_df = df.sort_values("record_date")
+        if "heart_rate" in chart_df:
+            st.plotly_chart(px.line(chart_df, x="record_date", y="heart_rate", markers=True, title="Heart rate history", template="plotly_dark"), use_container_width=True)
+        if "spo2" in chart_df:
+            st.plotly_chart(px.line(chart_df, x="record_date", y="spo2", markers=True, title="Blood oxygen (SpO₂) history", template="plotly_dark"), use_container_width=True)
+        st.caption("Trends are descriptive only and should be interpreted by qualified medical personnel.")
+    else:
+        st.info("No daily records yet. Open Daily Health Entry to add the first record.")
+        st.metric("Records logged", 0)
+    st.subheader("Mission gravity environment")
+    st.write("Earth (1g), orbital microgravity, Moon (0.16g), Mars (0.38g), or Return to Earth (1g). Select the environment when entering each daily record.")
+
+# ---------- Daily Entry ----------
+elif page == "Daily Health Log":
+    st.header("Daily Astronaut Health Entry")
+    st.write("Submit one record for each astronaut per mission date. Fields marked optional can be left blank.")
+    with st.form("daily_health_form", clear_on_submit=True):
+        c1,c2 = st.columns(2)
+        record_date = c1.date_input("Record date", value=date.today())
+        mission_day = c2.number_input("Mission day", min_value=0, max_value=5000, value=1, step=1)
+        astronaut_name = st.text_input("Astronaut display name", value=(getattr(user, "user_metadata", {}) or {}).get("astronaut_name", "") if not isinstance(user, dict) else user.get("user_metadata", {}).get("astronaut_name", ""))
+        astronaut_code = st.text_input("Astronaut ID / callsign", value=(getattr(user, "user_metadata", {}) or {}).get("astronaut_code", "") if not isinstance(user, dict) else user.get("user_metadata", {}).get("astronaut_code", ""))
+        gravity = st.selectbox("Gravity environment", ["Earth (1g)", "Orbital microgravity", "Moon (0.16g)", "Mars (0.38g)", "Return to Earth (1g)"])
+        st.markdown("#### Vital signs")
+        c1,c2,c3 = st.columns(3)
+        heart_rate = c1.number_input("Heart rate (bpm)", 30, 220, 70)
+        systolic = c2.number_input("Systolic BP (mmHg)", 60, 250, 120)
+        diastolic = c3.number_input("Diastolic BP (mmHg)", 30, 160, 80)
+        c1,c2,c3 = st.columns(3)
+        spo2 = c1.number_input("SpO₂ (%)", 50, 100, 98)
+        temperature = c2.number_input("Temperature (°C)", 30.0, 43.0, 36.8, step=0.1, format="%.1f")
+        sleep = c3.number_input("Sleep (hours)", 0.0, 24.0, 8.0, step=0.5)
+        st.markdown("#### Daily wellbeing")
+        c1,c2,c3 = st.columns(3)
+        stress = c1.slider("Stress level", 0, 10, 2)
+        fatigue = c2.slider("Fatigue level", 0, 10, 2)
+        exercise = c3.number_input("Exercise (minutes)", 0, 600, 30)
+        mood = st.selectbox("Mood", ["Good", "Okay", "Low", "Anxious", "Irritable"])
+        symptoms = st.multiselect("Symptoms (select any)", ["Dizziness", "Nausea", "Headache", "Vision changes", "Facial fullness", "Muscle discomfort", "Back discomfort", "Sleep difficulty", "None"])
+        notes = st.text_area("Additional notes (optional)", max_chars=1000)
+        consent = st.checkbox("I confirm this is a demonstration / authorized entry and the information is accurate.")
+        submitted = st.form_submit_button("Save daily health record", use_container_width=True)
     if submitted:
-        new_record = {
-            "Date": datetime.now(), "Heart Rate": heart_rate,
-            "Systolic BP": systolic, "Diastolic BP": diastolic,
-            "SpO2": spo2, "Temperature": temperature, "Sleep Hours": sleep,
-            "Stress": stress, "Fatigue": fatigue, "Exercise Minutes": exercise,
-            "Mood": mood, "Gravity Phase": phase,
-            "Gravity Symptoms": ", ".join(symptoms) if symptoms else "None"
-        }
-        st.session_state.health_data = pd.concat(
-            [st.session_state.health_data, pd.DataFrame([new_record])],
-            ignore_index=True
-        )
-        level, reasons = assess_health(new_record)
-        st.success("Reading added to this session.")
-        if level == "RED":
-            st.error("RED — Urgent medical review required")
-        elif level == "YELLOW":
-            st.warning("YELLOW — Attention recommended")
+        if not astronaut_name.strip() or not astronaut_code.strip():
+            st.error("Please provide the astronaut display name and ID/callsign.")
+        elif not consent:
+            st.warning("Please confirm the entry before saving.")
         else:
-            st.success("GREEN — No rule-based warning detected")
-        for reason in reasons:
-            st.write("•", reason)
-        base = st.session_state.health_data.iloc[baseline_index].to_dict()
-        count, status, _, details = gravity_assessment(base, new_record)
-        st.subheader("Gravity Adaptation Results")
-        st.metric("Change indicators", count)
-        st.write("**Monitoring summary:**", status)
-        for detail in details:
-            st.write("•", detail)
-        st.info("For emergency symptoms, follow mission emergency protocols immediately. Do not rely on this prototype to decide whether care is needed.")
+            payload = {
+                "user_id": user_id, "record_date": record_date.isoformat(), "mission_day": int(mission_day),
+                "astronaut_name": astronaut_name.strip(), "astronaut_code": astronaut_code.strip(),
+                "gravity_environment": gravity, "heart_rate": int(heart_rate), "systolic_bp": int(systolic),
+                "diastolic_bp": int(diastolic), "spo2": int(spo2), "temperature_c": float(temperature),
+                "sleep_hours": float(sleep), "stress_level": int(stress), "fatigue_level": int(fatigue),
+                "exercise_minutes": int(exercise), "mood": mood,
+                "symptoms": [s for s in symptoms if s != "None"], "notes": notes.strip() or None
+            }
+            try:
+                client.table("health_records").insert(payload).execute()
+                st.success("Daily health record saved permanently to your GravityWare database.")
+                st.rerun()
+            except Exception as exc:
+                if "duplicate" in str(exc).lower() or "unique" in str(exc).lower():
+                    st.error("A record already exists for this astronaut ID and date. Open Health History to review it.")
+                else:
+                    st.error(f"Could not save the record: {exc}")
 
+# ---------- History ----------
+elif page == "Health History":
+    st.header("Your Health History")
+    c1,c2 = st.columns(2)
+    start = c1.date_input("From", value=date.today()-timedelta(days=30), key="hist_start")
+    end = c2.date_input("To", value=date.today(), key="hist_end")
+    if start > end:
+        st.warning("The start date must be before the end date.")
+    else:
+        rows = load_records(start, end)
+        df = pd.DataFrame(rows or [])
+        if df.empty:
+            st.info("No records found for this period.")
+        else:
+            display_cols = ["record_date","mission_day","astronaut_code","gravity_environment","heart_rate","systolic_bp","diastolic_bp","spo2","temperature_c","sleep_hours","stress_level","fatigue_level","exercise_minutes","mood","symptoms"]
+            st.dataframe(df[[c for c in display_cols if c in df.columns]], use_container_width=True, hide_index=True)
+            st.caption("Only records belonging to your signed-in account are returned by the database security policies.")
+
+# ---------- Reports ----------
+elif page == "Reports":
+    st.header("Health Reports")
+    c1,c2 = st.columns(2)
+    start = c1.date_input("Report from", value=date.today()-timedelta(days=7), key="report_start")
+    end = c2.date_input("Report to", value=date.today(), key="report_end")
+    if start > end:
+        st.warning("The start date must be before the end date.")
+    else:
+        rows = load_records(start, end)
+        df = pd.DataFrame(rows or [])
+        st.write(f"**{len(df)}** record(s) in the selected period.")
+        if not df.empty:
+            st.dataframe(df, use_container_width=True, hide_index=True)
+        label = st.session_state.get("user_email", "Astronaut")
+        csv_bytes = df.to_csv(index=False).encode("utf-8-sig")
+        st.download_button("Download CSV report", data=csv_bytes, file_name=f"gravityware_report_{start}_{end}.csv", mime="text/csv", use_container_width=True)
+        pdf_bytes = make_pdf(df, f"Period: {start.isoformat()} to {end.isoformat()}", label)
+        st.download_button("Download PDF report", data=pdf_bytes, file_name=f"gravityware_report_{start}_{end}.pdf", mime="application/pdf", use_container_width=True)
+        st.caption("Reports are generated from your account's saved records. CSV contains all returned fields; PDF is a concise summary.")
+
+# ---------- Gravity Adaptation ----------
 elif page == "Gravity Adaptation":
-    st.subheader("🌍 Gravity Adaptation Monitor")
-    st.write("Explore the gravity environments and compare health readings with a chosen baseline.")
-    gravity_df = pd.DataFrame({
-        "Environment": list(GRAVITY_LEVELS.keys()),
-        "Gravity (g)": list(GRAVITY_LEVELS.values())
-    })
-    fig = px.bar(gravity_df, x="Environment", y="Gravity (g)",
-                 title="Approximate Gravity Levels Relative to Earth",
-                 template="plotly_dark")
-    st.plotly_chart(fig, use_container_width=True)
-    st.divider()
-    st.subheader("Choose comparison baseline")
-    options = [f"Record {i+1} — {pd.to_datetime(row['Date']).strftime('%Y-%m-%d %H:%M')} — {row['Gravity Phase']}"
-               for i, row in data.iterrows()]
-    chosen = st.selectbox("Baseline record", range(len(options)),
-                          format_func=lambda i: options[i],
-                          index=baseline_index)
-    st.session_state.baseline_index = chosen
-    baseline = data.iloc[chosen].to_dict()
-    latest = data.iloc[-1].to_dict()
-    count, status, indicators, details = gravity_assessment(baseline, latest)
-    st.caption("For the intended workflow, choose a pre-flight Earth record as the baseline.")
-    comparison = pd.DataFrame({
-        "Measurement": ["Heart Rate", "Systolic BP", "Diastolic BP", "SpO2",
-                        "Sleep Hours", "Stress", "Fatigue", "Exercise Minutes"],
-        "Baseline": [baseline[k] for k in ["Heart Rate", "Systolic BP", "Diastolic BP", "SpO2",
-                                            "Sleep Hours", "Stress", "Fatigue", "Exercise Minutes"]],
-        "Latest": [latest[k] for k in ["Heart Rate", "Systolic BP", "Diastolic BP", "SpO2",
-                                        "Sleep Hours", "Stress", "Fatigue", "Exercise Minutes"]]
-    })
-    st.dataframe(comparison, use_container_width=True, hide_index=True)
-    st.metric("Flagged change indicators", count)
-    st.write("**Monitoring summary:**", status)
-    for detail in details:
-        st.info(detail)
-    st.caption("These are changes in entered data. They do not prove that gravity caused those changes.")
+    st.header("Gravity Adaptation Monitor")
+    rows = load_records()
+    df = pd.DataFrame(rows or [])
+    if df.empty:
+        st.info("Add daily records first to view gravity adaptation trends.")
+    else:
+        df = df.sort_values("record_date")
+        baseline_date = st.selectbox("Choose baseline record date", df["record_date"].astype(str).tolist(), index=0)
+        baseline = df[df["record_date"].astype(str) == baseline_date].iloc[0]
+        latest = df.iloc[-1]
+        metrics = ["heart_rate","spo2","sleep_hours","stress_level","fatigue_level"]
+        changes = []
+        for metric in metrics:
+            b = float(baseline[metric])
+            current = float(latest[metric])
+            changes.append({"Indicator": metric.replace("_"," ").title(), "Baseline": b, "Latest": current, "Change": round(current-b,2)})
+        st.dataframe(pd.DataFrame(changes), use_container_width=True, hide_index=True)
+        st.info("The baseline comparison is descriptive and experimental. It is not a validated medical score and cannot prove that gravity caused a change.")
+        st.plotly_chart(px.line(df, x="record_date", y=["heart_rate","spo2"], markers=True, title="Selected health indicators over time", template="plotly_dark"), use_container_width=True)
 
-elif page == "Body Systems":
-    st.subheader("🧍 Human Body Systems in Space")
-    body_systems = {
-        "Cardiovascular": "Track heart rate and blood pressure. Fluid redistribution and cardiovascular adaptation are important spaceflight research topics.",
-        "Vision and Fluid Shift": "Track reported vision changes, headaches and facial fullness. Spaceflight-associated fluid shifts are an important research area.",
-        "Balance and Vestibular": "Track dizziness, nausea and orientation difficulties. Changes in gravity can affect balance adaptation.",
-        "Muscles and Bones": "Track exercise, fatigue and muscle discomfort. Reduced mechanical loading can contribute to muscle and bone deconditioning.",
-        "Mental Wellness": "Track sleep, stress, mood and fatigue. Isolation and mission conditions can affect wellbeing."
-    }
-    selected = st.selectbox("Select a body system", list(body_systems))
-    st.markdown(f"### {selected}")
-    st.write(body_systems[selected])
-    st.info("This explorer provides educational information and symptom tracking. It cannot measure internal fluid distribution, bone density or eye structure without specialist equipment.")
-
-elif page == "Mission Report":
-    st.subheader("📄 Astronaut Mission Health Report")
-    st.write("**Team:** BigwIN")
-    st.write("**Astronaut ID:**", astronaut_id)
-    st.write("**Mission:**", mission)
-    st.write("**Selected gravity environment:**", gravity_phase)
-    st.write("**Mission day:**", mission_day)
-    st.write("**Generated:**", datetime.now().strftime("%Y-%m-%d %H:%M"))
-    st.divider()
-    st.write("### Latest Health Assessment")
-    st.write("**Risk level:**", health_level)
-    for reason in health_reasons:
-        st.write("•", reason)
-    st.write("### Gravity Adaptation Monitor")
-    st.write("**Flagged change indicators:**", gam_count)
-    st.write("**Monitoring summary:**", gam_status)
-    for detail in gam_details:
-        st.write("•", detail)
-    st.write("### Suggested next steps")
-    for action in recommendations(health_level):
-        st.write("•", action)
-    csv_bytes = data.to_csv(index=False).encode("utf-8")
-    st.download_button("⬇️ Download Health History CSV", csv_bytes,
-                       "gravityware_health_history.csv", "text/csv")
-    report = f"""GRAVITYWARE v{VERSION} — MISSION HEALTH REPORT
-TEAM BIGWIN
-
-Astronaut ID: {astronaut_id}
-Mission: {mission}
-Selected gravity environment: {gravity_phase}
-Mission day: {mission_day}
-Generated: {datetime.now()}
-
-HEALTH ASSESSMENT: {health_level}
-{chr(10).join('- ' + x for x in health_reasons)}
-
-GRAVITY ADAPTATION MONITOR
-Flagged change indicators: {gam_count}
-Monitoring summary: {gam_status}
-{chr(10).join('- ' + x for x in gam_details)}
-
-SUGGESTED NEXT STEPS
-{chr(10).join('- ' + x for x in recommendations(health_level))}
-
-LIMITATIONS
-Educational prototype using simulated or manually entered data.
-Not a clinical diagnosis or validated medical decision system.
-Follow mission medical protocols.
-"""
-    st.download_button("⬇️ Download Mission Report TXT", report,
-                       "gravityware_mission_report.txt", "text/plain")
-
+# ---------- About ----------
 elif page == "About":
-    st.subheader("About GravityWare")
+    st.header("About GravityWare")
     st.markdown("""
-**GravityWare** is an educational astronaut health and gravity-adaptation
-monitoring prototype developed by **Team BigwIN**.
+**GravityWare — Understanding Health Beyond Earth** is a Team BigwIN educational prototype exploring daily astronaut health logging and health changes across mission gravity environments.
 
-Its central feature, the **Gravity Adaptation Monitor (GAM)**, compares
-entered health readings and reported symptoms with a selected baseline
-across different gravity environments.
+**Included in v1.3**
+- Individual astronaut registration and sign-in
+- Account-isolated permanent daily records
+- Vital signs, sleep, wellbeing, exercise, symptoms and notes
+- Health history and trend charts
+- Baseline comparison across gravity environments
+- PDF and CSV date-range reports
 
-**Features**
-- Astronaut health monitoring
-- Personal baseline comparison
-- Earth, orbital microgravity, Moon and Mars gravity profiles
-- Gravity-related symptom tracking
-- Explainable rule-based health alerts
-- Health trend charts and downloadable reports
-
-**Approximate gravity levels**
-- Earth: 1g
-- Moon: 0.16g
-- Mars: 0.38g
-- Orbital microgravity: apparent weightlessness; gravity is not literally zero
-
-**Technology:** Python, Streamlit, Pandas and Plotly.
-
-**Data notice:** Initial readings are simulated demonstration data, not real
-astronaut medical records. The health rules and GAM are experimental and
-not clinically validated. Changes shown by GAM do not establish that gravity
-caused those changes.
+**Scientific and safety limitations**
+- The app is not a medical device and does not diagnose, predict, or recommend treatment.
+- The gravity adaptation comparison is experimental and descriptive, not clinically validated.
+- Orbital conditions are described as microgravity (apparent weightlessness), not literal zero gravity.
+- Only enter simulated or explicitly authorized demonstration data. Do not enter sensitive real medical records in this competition prototype.
+- Follow qualified medical and mission protocols for health concerns or emergencies.
 """)
-    st.markdown("[NASA Human Research Program](https://www.nasa.gov/hrp/)")
-    st.markdown("[NASA Human Research Roadmap](https://humanresearchroadmap.nasa.gov/)")
-
-st.divider()
-st.caption(f"GravityWare v{VERSION} | Team BigwIN | Educational space-health prototype")
-st.caption("Not for diagnosis or treatment. Follow qualified medical and mission protocols.")
+    st.markdown("[NASA Human Research Program](https://www.nasa.gov/hrp/) · [NASA Human Research Roadmap](https://humanresearchroadmap.nasa.gov/)")
