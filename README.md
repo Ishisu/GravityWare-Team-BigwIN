@@ -1,56 +1,72 @@
-# GravityWare v1.3 — Team BigwIN
+# GravityWare — Team BigwIN
 
-**Understanding Health Beyond Earth**
+**Understanding Health Beyond Earth**  
+NASA Space Apps Challenge 2026 · Astronaut health-monitoring software prototype
 
-GravityWare v1.3 is a Streamlit educational prototype for astronaut daily health logging, personal trend review and gravity-adaptation comparisons.
+GravityWare is a Streamlit prototype for astronaut health logging, personal trend review, gravity-environment education, experimental pattern screening, and a demonstration medical-review / mission-control workflow.
 
-## What's new in v1.3
-- Individual email/password account registration and sign-in using Supabase Auth
-- Permanent PostgreSQL health records in Supabase
-- Row Level Security (RLS): each signed-in user can only read/write their own records
-- One daily record per astronaut ID per date
-- Daily entry, health history, dashboard charts and baseline comparison
-- Date-range PDF and CSV report downloads
+## Main features
 
-## Project structure
-```
-GravityWare_v1.3/
-├── app.py
-├── assets/
-│   └── gravityware_logo.png
-├── requirements.txt
-├── README.md
-├── SETUP_GUIDE.md
-├── .gitignore
-├── .streamlit/
-│   └── secrets.toml.example
-├── database/
-│   └── setup.sql
-└── data/
-    └── sample_astronaut_data.csv
+- Individual astronaut sign-in and profile settings using Supabase Auth.
+- Daily health logging and account-specific health history.
+- CSV import with preview and validation.
+- Personal trend review and experimental Early Warning AI screening.
+- Gravity-aware assessment using the astronaut's saved mission environment and personal history.
+- Educational comparison of orbital microgravity, Moon gravity (0.16g), and Mars gravity (0.38g).
+- Gravity Health Education and NASA Human Research Program context.
+- PDF and CSV report downloads.
+- Demonstration workflow: astronaut requests review, a doctor records an assessment, and Mission Control records an operational decision.
+- Astronaut dashboard displays the latest medical-review outcome.
+
+## Run locally (Windows)
+
+Open this project folder in VS Code. Configure `.streamlit/secrets.toml` using `.streamlit/secrets.toml.example`, then run:
+
+```powershell
+py -3.13 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m streamlit run app.py
 ```
 
-## Quick start
-1. Create a Supabase project.
-2. Run `database/setup.sql` in Supabase SQL Editor.
-3. Copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml`.
-4. Put your Supabase Project URL and **publishable/anon key** in the secrets file.
-5. In the project terminal run:
-   ```
-   python -m venv .venv
-   .venv\Scripts\python.exe -m pip install -r requirements.txt
-   .venv\Scripts\python.exe -m streamlit run app.py
-   ```
-6. Create an astronaut account in the app and sign in.
+Keep the terminal open while using the app. Streamlit normally opens at `http://localhost:8501`.
 
-See `SETUP_GUIDE.md` for full local and Streamlit Community Cloud deployment instructions.
+See `SETUP_GUIDE.md` for setup and deployment guidance.
 
-## Security notes
-- Do not commit `.streamlit/secrets.toml`.
-- Use the Supabase publishable/anon key with RLS policies enabled. Never use the Supabase `service_role` or secret key in this Streamlit app.
-- Do not collect real astronaut medical data. This competition prototype is not designed or certified for protected health information.
-- Email confirmation may be enabled by default in Supabase Auth. If enabled, users must confirm their email before signing in.
-- Use a strong, unique password. For a real production service, add stronger account lifecycle, audit, operational and security controls.
+## Supabase and existing data
 
-## Scientific limitations
-Gravity Adaptation comparisons are descriptive and experimental, not a validated clinical score. They cannot prove gravity caused an observed change. Sample records are simulated. This app is not a medical device, diagnostic system or substitute for qualified medical/mission protocols.
+- This project uses Supabase Auth and the existing `health_records`, `reviewer_access`, and `mission_reviews` tables.
+- **For an already configured GravityWare Supabase project, do not rerun `database/setup.sql` or the collaboration migration.** They are initial setup scripts, not routine launch steps.
+- Keep `.streamlit/secrets.toml` private. Never upload it to GitHub or share its contents.
+- Use only the publishable/anon key in the client configuration with RLS enabled. Never put a service-role or secret key in the app.
+- Before any future database or RLS changes, take and verify a backup.
+
+## Demo data and scientific limitations
+
+Use fictional profiles and synthetic or explicitly authorized demonstration records only. The health readings are not NASA astronaut records or live spacecraft telemetry. NASA resources are used as scientific and educational context, not as a live data connection.
+
+Gravity-aware comparisons are descriptive and experimental. They are not clinically validated, do not establish that gravity caused a change, and do not provide diagnosis, treatment, medical clearance, or emergency triage. Long-duration human health effects in lunar and Martian gravity are uncertain. Follow qualified medical and mission procedures for real concerns.
+
+## Collaboration workflow limitations
+
+The doctor / Mission Control workflow is a competition prototype, not a live NASA integration or production clinical record system. Reviewer roles are assigned by a Supabase administrator. The app does not send email or push notifications. Do not use real patient or astronaut health data. UI-level role separation does not by itself establish production-grade database security.
+
+## Project files
+
+- `app.py` — Streamlit application.
+- `early_warning.py` — experimental pattern-screening logic.
+- `requirements.txt` — Python dependencies.
+- `assets/` — GravityWare branding.
+- `data/sample_astronaut_data.csv` — sample demonstration data.
+- `database/setup.sql` — initial health-record schema for a fresh Supabase project only.
+- `database/collaboration_setup_v1_7_4.sql` — initial collaboration schema/policies; do not rerun on an existing configured project.
+- `.streamlit/secrets.toml.example` — configuration template; copy to `secrets.toml` and fill privately.
+- `COMPETITION_FINAL_CHECKLIST.md` — final submission and demo checklist.
+- `COLLABORATION_SETUP_GUIDE.md` — reviewer setup and workflow notes.
+
+## NASA references
+
+- NASA Five Hazards of Human Spaceflight: https://www.nasa.gov/hrp/hazards/
+- NASA Risks of Human Spaceflight: https://www.nasa.gov/hrp/risks/
+- NASA Ongoing HRP Research in Space: https://www.nasa.gov/hrp/ongoing-hrp-research/
+- NASA Human Research Program: https://www.nasa.gov/hrp/
+- Official NASA Space Apps 2026 challenge brief: https://www.spaceappschallenge.org/2026/challenges/health-monitoring-software/
